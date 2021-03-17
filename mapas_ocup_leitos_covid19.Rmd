@@ -1,0 +1,80 @@
+---
+title: "Ocupação de leitos COVID-19 nas UFs"
+output:
+  html_document:
+    df_print: paged
+---
+
+Este notebook apresenta uma forma de criar uma série de mapas sobre a ocupação de leitos COVID-19 nas UFs.
+
+# Mapa base
+
+O primeiro passo é providenciar o nosso mapa base, com as UFs. Vamos usar o pacote `geobr`.
+
+```{r}
+library(geobr)
+
+base_uf <- geobr::read_state(simplified = TRUE, showProgress = FALSE)
+```
+
+# Dados
+
+Os dados de ocupação de leitos podem ser baixados no projeto MonitoraCovid-19 da Fiocruz (https://bigdata-covid19.icict.fiocruz.br). Vá na aba Evolução > Ocupação de leitos e clique em `Download dos dados`.
+
+Após o download do arquivo, vamos fazer a leitura do CSV usando o pacote `readr`, contido no `tidyverse`.
+
+```{r}
+library(tidyverse)
+
+dados <- read_csv2(file = "ocup_leitos_covid19_20210317_103137.csv")
+```
+
+Não esqueça de alterar a localização e o nome do arquivo conforme o seu download ;-)
+
+# Mapa
+
+Agora podemos começar a criar a nossa série de mapas.
+
+## Juntar mapa e dados
+
+O primeiro passo é juntar o mapa base das geometrias das UFs com os dados de ocupação de leitos.
+
+Iremos usar o comando `left_join` para ter certeza que todos os estados apareçam no mapa, mesmo que não tenham dados. A informação em comum entre os dois objetos é o nome da UF.
+
+```{r}
+dados_mapa <- left_join(base_uf, dados, by = c("name_state" = "uf"))
+```
+
+## Série de mapas
+
+Agora podemos criar a série de mapas.
+
+```{r fig.width=10, fig.height=10}
+dados_mapa %>%
+  # Remove registros com NAs
+  na.omit() %>%
+  # Cria uma variável com a data de coleta formatada
+  mutate(
+    data_coleta_char = as.character(format(data_coleta, "%d/%m/%Y")),
+    data_coleta_char = fct_reorder(data_coleta_char, data_coleta)
+  ) %>%
+  # Início da criação do mapa
+  ggplot() +
+    # Adiciona o mapa das UFs ao gráfico, colorindo pela variável alerta
+    geom_sf(aes(fill = alerta), color = "white", lwd = .2) +
+    # Cor das UFs conforme o alerta  
+  scale_fill_manual(values=c("Baixo" = "#55a95a", "Médio" = "#f4b132", "Crítico" = "#ca373c"), breaks = c("Baixo", "Médio", "Crítico")) +
+    # Títulos
+    labs(title = "Taxa de ocupação (%) de leitos de UTI Covid-19 para adultos", fill = "Alerta", caption = "Observatório Covid-19 | Fiocruz") +
+    ylab("") + xlab("") +
+    # Adequações do tema
+    theme(
+      legend.position="bottom",
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank()
+    ) +
+    # Produz um mapa para cada data de coleta
+    facet_wrap(~ data_coleta_char) 
+```
+
